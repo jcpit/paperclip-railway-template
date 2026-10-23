@@ -21,7 +21,7 @@ function startPaperclip() {
     PORT: String(INTERNAL_PORT),
     PAPERCLIP_OPEN_ON_LISTEN: "false",
   };
-  paperclipProc = spawn("tsx", ["server/dist/index.js"], {
+  paperclipProc = spawn("node", ["server/dist-runtime/index.mjs"], {
     cwd: APP_ROOT,
     env: childEnv,
     stdio: "inherit",

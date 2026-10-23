@@ -1,5 +1,13 @@
 # Template Changelog
 
+## 2026-10-23
+
+- Changed: deploy the official Paperclip image for upstream development commit `c5ca29dbeff50558c40984fbc03b90cfd4749ae2`, pinned to multi-platform digest `sha256:bd48b47f5ffc9b4d37c2e373b224eb5ad4c6f87c8285635c657b877bcd6fc508`. This includes experimental OpenAI Dot support, which is absent from the latest stable `v2026.1012.0` release. It is not automatic tracking of an unstable channel.
+- Changed: inherit upstream's Node ≥24.11 runtime, built Rust Runner, provider pack and bundled agent tools rather than rebuilding Paperclip with Node 22 and no Rust toolchain. The wrapper launches the upstream runtime bundle with Node. Retained the setup page, capability-dropping entrypoint, persistent home, and tini orphan reaping.
+- Breaking: `PAPERCLIP_IMAGE` replaces `PAPERCLIP_REF` / `PAPERCLIP_REPO` source-build overrides. Remove legacy variables before rebuilding; a non-empty `PAPERCLIP_REF` fails explicitly. The bump helper now resolves a published commit-tagged image and verifies its multi-platform manifest digest; public access no longer requires a GitHub token.
+- Docs: added Dot pairing, experimental settings, HTTPS/event requirements and disabled-by-default workspace guidance. Documented image disk requirements and the significant migration/lock-protocol jump: back up database and volume, stop all old writers before starting the new build, and do not rely on image-only rollback. No live Railway upgrade or real Dot pairing has been qualified here.
+- Tests: added offline coverage for image resolution, digest/platform validation, credential separation, updater safety, and the packaged-runtime deployment contract.
+
 ## 2026-09-23
 
 - Docs: documented `PAPERCLIP_OPENCODE_PROVIDERS` (custom OpenCode providers/models as JSON, with `{env:VAR}` placeholder expansion), `PAPERCLIP_OPENCODE_SMALL_MODEL`, and `PAPERCLIP_OPENCODE_PRINT_LOGS` — these are the actual mechanism `opencode_local` reads for "add another model/platform," none of which were previously documented (#13). Also documented that persistent OpenCode logins (`opencode auth login` over `railway ssh`) land in `/paperclip/.config/opencode`, on the volume, and survive redeploys.

@@ -4,11 +4,17 @@ One-click deploy of [Paperclip](https://github.com/paperclipai/paperclip) on [Ra
 
 ## What you get
 
-- **Paperclip** — the app (built from a pinned upstream release via this repo’s Dockerfile).
+- **Paperclip** — the app, native Rust Runner, and agent tools from a digest-pinned official upstream image.
 - **Postgres** — a Railway Postgres service; the app uses it for auth and data.
 - **Setup UI** at `/setup` — a small page that lets you **generate your first admin invite URL** so you can create the initial admin account. No CLI, no config files.
 
 After you create that admin, you use Paperclip at `/` as usual (login, agents, etc.).
+
+### Current version and OpenAI Dots
+
+This template pins upstream development commit [`c5ca29d`](https://github.com/paperclipai/paperclip/commit/c5ca29dbeff50558c40984fbc03b90cfd4749ae2) (23 October 2026), the latest upstream commit checked when updating this template. It includes **experimental OpenAI Dot support**. The latest stable release at that time, `v2026.1012.0`, does **not** include Dot, so this is deliberately a development build, not a stable-release upgrade. The Dockerfile pins the full image digest; it does not automatically track `master` or `latest`.
+
+For an existing deployment, read [Upgrading an existing instance](#upgrading-an-existing-instance) before rebuilding: this is a large database migration jump from the old `v2026.722.0` default.
 
 ## Deploy
 
@@ -19,6 +25,8 @@ After you create that admin, you use Paperclip at `/` as usual (login, agents, e
    - **Healthcheck path** `/setup/healthz`
    - A **volume** mounted at `/paperclip` (for app data)
 4. Deploy. Once the service is live, open your app URL and go to **`/setup`**.
+
+**Railway plan:** this Dot-capable upstream image exceeds 4 GB. It requires **Hobby or higher** under Railway's current [image-size limits](https://docs.railway.com/pricing/plans#default-plan-resources); Trial and Free allow only 4 GB images.
 
 **Template URL:**
 
@@ -137,6 +145,20 @@ opencode auth login
 
 Each agent run copies this config out before running OpenCode, so nothing here is mutated by a run — updates only happen when you log in again.
 
+### Connect an OpenAI Dot
+
+Dot runs externally in OpenAI; it is not a Codex model or another CLI to install. An `OPENAI_API_KEY` and the setup page's **Run Codex login** button are not used to pair Dot.
+
+1. Use a stable public HTTPS domain and set `PAPERCLIP_PUBLIC_URL` and `BETTER_AUTH_BASE_URL` to that origin. Keep `PAPERCLIP_DEPLOYMENT_MODE=authenticated`.
+2. In **Instance settings → Experimental**, enable **Assistant connections (MCP)** and **OpenAI Dot**. The old `PAPERCLIP_ENABLE_OPENAI_DOT` environment flag is not supported. Self-hosted Dot does not require enabling the general Paperclip Runner toggle.
+3. Choose **New Agent → Invite an external agent → Dot** (or the standalone **OpenAI Dot** option). Acknowledge external, unmetered provider billing and complete any required hire approval.
+4. Copy the **Pair Dot / Set up with Dot** prompt into your Dot. It uses the dedicated `<your-public-origin>/mcp/runner` connection and a one-use pairing code, not the personal `/mcp/paperclip` endpoint.
+5. Complete pairing and **Test event delivery**. Wait for the verified event round trip before assigning work; a connected OAuth account alone is not proof of readiness.
+
+The wrapper forwards MCP, OAuth discovery, and pairing routes to Paperclip. No additional service or sandbox provider is needed for the documented self-hosted local-controller path. Keep optional Dot workspace/command access **disabled**: command execution needs Linux bubblewrap and private PID namespaces, which this Railway template has not qualified. Do not bypass those checks. Provider costs are not metered by Paperclip, and cancelling a task does not prove that external Dot activity stopped.
+
+See the [upstream Dot runbook for this exact build](https://github.com/paperclipai/paperclip/blob/c5ca29dbeff50558c40984fbc03b90cfd4749ae2/doc/openai-dot-runner.md) for pairing, recovery, and limitations. A real Dot account and successful event test are still required; shipping the integration does not grant account access.
+
 ## Networking and storage (Railway)
 
 - **HTTP proxy:** Enable a public domain for the Paperclip service and set the port to **3100**.
@@ -145,29 +167,37 @@ Each agent run copies this config out before running OpenCode, so nothing here i
 
 ## How this template works
 
-- The **Dockerfile** builds a pinned upstream Paperclip release (`PAPERCLIP_REF` in the Dockerfile; overridable at **build** time via the same-named Railway variable or `docker build --build-arg`). It does **not** use a Docker `VOLUME` (Railway handles persistence via its volume at `/paperclip`).
+- The **Dockerfile** extends a pinned official `ghcr.io/paperclipai/paperclip` image (`PAPERCLIP_IMAGE`, overridable at **build** time). Upstream supplies Node ≥24.11, the compiled UI/server, native Rust Runner and provider pack, and agent CLIs. The complete image digest pins these together; Railway does not rebuild the Rust toolchain. Persistence is provided by Railway's volume at `/paperclip`.
 - At runtime, a small **wrapper server** runs: it starts Paperclip on an internal port, proxies requests to it, and serves the **setup UI** at `/setup` (and health at `/setup/healthz`). So you never need to run CLI bootstrap or read logs to get an invite link.
 
 ## Updating the upstream Paperclip version
 
-The image is pinned to a specific Paperclip release. To bump to a newer upstream tag:
+The complete upstream image is pinned by commit and manifest digest. To resolve the current upstream `master` commit to its published multi-platform image:
 
 ```bash
-GITHUB_TOKEN=... node scripts/bump-paperclip-ref.mjs
+node scripts/bump-paperclip-ref.mjs
 ```
 
-Then rebuild and redeploy.
+The historical script name is retained, but it now updates `PAPERCLIP_IMAGE`, not `PAPERCLIP_REF`. It needs no credentials for public access; an already-configured `GITHUB_TOKEN` is optional for GitHub rate limits. You can supply a specific upstream commit or branch as the first argument. If the matching full-commit image has not been published yet, the script fails without changing the Dockerfile. It verifies the manifest digest and both Linux architectures; it does not test Dot functionality or migrations. Review the diff and upstream upgrade notes, then build and validate before redeploying.
 
-### Pin a different Paperclip release (no fork)
+### Pin a different Paperclip image (no fork)
 
-Paperclip is **cloned while the Docker image is built**, not at container start. Overriding the version is **build-time only**: set the variable, then trigger a **new build** (redeploy).
+Overriding the image is **build-time only**: set the variable, then trigger a **new build**. Use an image containing Dot support; the `2026.1012.0` stable image does not. Prefer an immutable `@sha256:…` manifest digest.
 
 | Where | What to do |
 |-------|------------|
-| **Railway** | Add a service variable **`PAPERCLIP_REF`** with a valid tag or branch from [paperclipai/paperclip](https://github.com/paperclipai/paperclip) (often the same value as the default `PAPERCLIP_REF` in this repo’s `Dockerfile`). Railway passes service variables into the build when the Dockerfile declares matching `ARG` lines; see [Using variables at build time](https://docs.railway.com/guides/dockerfiles#using-variables-at-build-time). |
-| **Local `docker build`** | `docker build --build-arg PAPERCLIP_REF=v2026.722.0 -t paperclip-railway-template .` |
+| **Railway** | Set **`PAPERCLIP_IMAGE`** to a compatible official image reference. Railway passes service variables into the build when the Dockerfile declares matching `ARG` lines; see [Using variables at build time](https://docs.railway.com/guides/dockerfiles#using-variables-at-build-time). Remove any old **`PAPERCLIP_REF`** and **`PAPERCLIP_REPO`** overrides. A non-empty `PAPERCLIP_REF` now fails the build with migration instructions instead of being silently ignored. |
+| **Local `docker build`** | `docker build -t paperclip-railway-template .` uses the pinned default. For an override, add `--build-arg PAPERCLIP_IMAGE=ghcr.io/paperclipai/paperclip@sha256:<manifest-digest>`. |
 
-If you omit `PAPERCLIP_REF`, the default in the Dockerfile is used.
+If you omit `PAPERCLIP_IMAGE`, the default in the Dockerfile is used. The upstream image is large (about 5.2 GB compressed for amd64 at this pin); allow additional space for unpacked layers and the wrapper build. Railway Trial/Free's 4 GB image limit is insufficient; use Hobby or higher. A source tag/branch is no longer a supported build argument.
+
+### Upgrading an existing instance
+
+1. Back up **both PostgreSQL and the `/paperclip` volume** and verify you can restore them. This update jumps from migrations through `0183` in the old default to `0374` in the pinned build; non-interactive startup can apply outstanding migrations automatically. This migration path has not been rehearsed by this template.
+2. Drain active tasks and stop **every old server/worker** that writes to the volume before starting the new image. Old and new versions must not run against the same instance root at the same time, including during Railway's deployment overlap. Arrange a stopped-old/start-new upgrade rather than a rolling deployment for this transition.
+3. Follow the upstream [workspace restore-lock upgrade notes](https://github.com/paperclipai/paperclip/blob/c5ca29dbeff50558c40984fbc03b90cfd4749ae2/doc/workspace-restore-locks.md) for any legacy directory locks. Never remove the new `.lock.sqlite` files. Review custom tool grants, whose restrictions are now enforced more strictly.
+4. Remove legacy build overrides, rebuild, and check Paperclip's own `/api/health`, sign-in, existing data, and a harmless agent task. `/setup/healthz` reports wrapper availability separately from `paperclipReady`; its HTTP 200 alone is not an application smoke test. Enable Dot and complete pairing/event delivery only after those checks pass.
+5. For rollback, stop all new writers first and use a compatible **database + volume backup**. Do not assume switching the image back reverses applied migrations or the lock protocol.
 
 ## Local test (developers)
 

@@ -1,50 +1,26 @@
-# Build upstream Paperclip from a pinned ref.
-FROM node:22-bookworm AS paperclip-build
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-RUN corepack enable
+# OpenAI Dot is not in v2026.1012.0 (the latest stable release at pin time).
+# Use the official development image; its full source commit is in the tag.
+# Pin the multi-platform manifest digest so app, Rust Runner, and CLI tools
+# advance together, without rebuilding upstream's native toolchain on Railway.
+ARG PAPERCLIP_IMAGE=ghcr.io/paperclipai/paperclip:sha-c5ca29dbeff50558c40984fbc03b90cfd4749ae2@sha256:bd48b47f5ffc9b4d37c2e373b224eb5ad4c6f87c8285635c657b877bcd6fc508
+FROM ${PAPERCLIP_IMAGE}
 
-ARG PAPERCLIP_REPO=https://github.com/paperclipai/paperclip.git
-ARG PAPERCLIP_REF=v2026.722.0
+# Reject the old source-build override instead of silently ignoring it.
+ARG PAPERCLIP_REF=""
+RUN if [ -n "${PAPERCLIP_REF}" ]; then \
+      echo "PAPERCLIP_REF is no longer supported. Remove it and use PAPERCLIP_IMAGE (see README)." >&2; \
+      exit 1; \
+    fi
 
-WORKDIR /paperclip
-RUN git clone --depth 1 --branch "${PAPERCLIP_REF}" "${PAPERCLIP_REPO}" .
-RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @paperclipai/ui build
-RUN pnpm --filter @paperclipai/plugin-sdk build
-RUN pnpm --filter @paperclipai/server build
-RUN test -f server/dist/index.js
-
-# Runtime image (direct Paperclip server, no wrapper).
-FROM node:22-bookworm
-ENV NODE_ENV=production
 ENV CLAUDE_CODE_BUBBLEWRAP=1
-# Match upstream production image defaults (paperclipai/paperclip Dockerfile) so
-# agent tooling, OpenCode, and config paths behave the same in containers.
-ENV HOME=/paperclip \
-    PAPERCLIP_INSTANCE_ID=default \
-    PAPERCLIP_CONFIG=/paperclip/instances/default/config.json \
-    OPENCODE_ALLOW_ALL_MODELS=true \
-    GEMINI_SANDBOX=false
 
+# The upstream image supplies Node >=24.11, the built server/UI, native Runner,
+# provider pack, and agent CLIs. Keep our capability-dropping entrypoint;
+# setpriv is supplied explicitly rather than assumed to exist in a slim image.
+USER root
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    git \
-    jq \
-    openssh-client \
-    ripgrep \
-    tini \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends util-linux \
     && rm -rf /var/lib/apt/lists/*
-RUN corepack enable
-
-WORKDIR /app
-COPY --from=paperclip-build /paperclip /app
 
 WORKDIR /wrapper
 COPY package.json /wrapper/package.json
@@ -52,27 +28,12 @@ RUN npm install --omit=dev && npm cache clean --force
 COPY src /wrapper/src
 COPY scripts/entrypoint.sh /wrapper/entrypoint.sh
 COPY scripts/bootstrap-ceo.mjs /wrapper/template/bootstrap-ceo.mjs
-RUN chmod +x /wrapper/entrypoint.sh
+RUN chmod +x /wrapper/entrypoint.sh \
+    && chown -R node:node /wrapper \
+    && test -f /app/server/dist-runtime/index.mjs \
+    && command -v setpriv
 
-# Optional local adapters/tools parity with upstream Dockerfile.
-# Pinned (not @latest): an unpinned upstream release could break builds for
-# every new deploy of this template with no warning. Bump deliberately.
-RUN npm install --global --omit=dev \
-    @anthropic-ai/claude-code@2.1.280 \
-    @openai/codex@0.156.1 \
-    opencode-ai@1.18.32 \
-    @google/gemini-cli@0.60.0
-RUN npm install --global --omit=dev tsx@4.23.15
-RUN mkdir -p /paperclip \
-    && chown -R node:node /app /paperclip /wrapper
-
-# Railway sets PORT at runtime and this process binds to it.
-# Entrypoint runs as root, fixes /paperclip volume permissions, then execs as node.
+# The wrapper owns Railway's public port and starts Paperclip on loopback.
 EXPOSE 3100
-# tini, not node, is PID 1. The entrypoint ends in `exec`, so without an init
-# node inherits PID 1 and never wait()s the orphans the kernel re-parents onto
-# it — agent runs spawn git/claude/esbuild/sh descendants that outlive their
-# leader, so they pile up as permanent zombies until the cgroup pid limit is
-# exhausted and every fork() in the container fails.
-ENTRYPOINT ["/usr/bin/tini", "--", "/wrapper/entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/wrapper/entrypoint.sh"]
 CMD ["node", "/wrapper/src/server.js"]
