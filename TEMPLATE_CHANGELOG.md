@@ -1,5 +1,12 @@
 # Template Changelog
 
+## 2026-10-24
+
+- Added: opt-in, unprivileged Tailscale userspace transport for a separately restricted SSH runner, with a loopback-only SOCKS listener and narrowly matched OpenSSH alias.
+- Security: dedicated control-tag verification, no DNS/subnet/exit/Tailscale-SSH access, private temporary join-key handling, child-environment credential removal and redacted authentication failures. A verified endpoint firewall is required for the runner's ingress restriction.
+- Preserved: disabled-overlay startup behavior, node UID/capability drop, pinned Paperclip image and application/runtime behavior. No application upgrade or database migration.
+- Tests: credential cleanup/redaction, identity scope and supervisor lifecycle checks.
+
 ## 2026-10-23
 
 - Changed: deploy the official Paperclip image for upstream development commit `c5ca29dbeff50558c40984fbc03b90cfd4749ae2`, pinned to multi-platform digest `sha256:bd48b47f5ffc9b4d37c2e373b224eb5ad4c6f87c8285635c657b877bcd6fc508`. This includes experimental OpenAI Dot support, which is absent from the latest stable `v2026.1012.0` release. It is not automatic tracking of an unstable channel.

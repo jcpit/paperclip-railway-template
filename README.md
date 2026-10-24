@@ -159,6 +159,20 @@ The wrapper forwards MCP, OAuth discovery, and pairing routes to Paperclip. No a
 
 See the [upstream Dot runbook for this exact build](https://github.com/paperclipai/paperclip/blob/c5ca29dbeff50558c40984fbc03b90cfd4749ae2/doc/openai-dot-runner.md) for pairing, recovery, and limitations. A real Dot account and successful event test are still required; shipping the integration does not grant account access.
 
+## Private SSH runner transport
+
+The image includes Tailscale 1.104.2 for an optional private SSH runner. It is disabled by default. The existing Paperclip image pin, application command, node UID and capability drop stay in place.
+
+Before enabling transport, create a tailnet policy that isolates `tag:paperclip-control` and `tag:paperclip-runner`, allowing only control → runner TCP22. Tailscale also permits ICMP for an allowed pair; a separately verified runner firewall must block unsolicited ICMP and other tailnet ingress while preserving necessary connection-related errors. Do not enrol devices under a wildcard allow-all policy.
+
+Use a dedicated, short-lived, non-reusable join key tagged only `tag:paperclip-control`. Set `PAPERCLIP_TAILSCALE_ENABLED=true` and temporarily supply `PAPERCLIP_TAILSCALE_AUTHKEY` as a Railway secret. The supervisor consumes the key from a private temporary file and removes it. It strips the key from child environments and suppresses authentication responses. Remove the Railway join-key variable after successful enrolment; the private identity persists under `/paperclip/runner-tailscale` on the existing volume.
+
+The daemon runs as the unprivileged node user with userspace networking. Its SOCKS listener binds only `127.0.0.1:1055`; it needs no TUN device or added capabilities. DNS changes, subnet routes, exit-node use/advertisement and Tailscale SSH are disabled, and the control node rejects incoming connections. Startup requires the exact control tag; initialization failure does not fall back to local agent execution.
+
+The narrowly matched OpenSSH alias `paperclip-runner` uses `tailscale nc` through the private local socket. Configure Paperclip's supported SSH environment with that host, port22, the dedicated unprivileged runner user/key, and a console-verified pinned host key. Use `codex_local` with the CLI engine and sandbox bypass disabled. No SSH port, SOCKS proxy or Proxmox management port needs public exposure. Keep runner SSH bound only to its intended tailnet address and retain the verified endpoint firewall.
+
+Verify the actual restricted command, subscription hello and project file reads before enabling agent work. Disabling `PAPERCLIP_TAILSCALE_ENABLED` restores the original startup path; remote SSH work will then be unavailable. Retain the prior Railway deployment for packaging rollback. This transport does not change Paperclip's upstream version or database schema.
+
 ## Networking and storage (Railway)
 
 - **HTTP proxy:** Enable a public domain for the Paperclip service and set the port to **3100**.
