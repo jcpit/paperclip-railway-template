@@ -18,9 +18,16 @@ ENV CLAUDE_CODE_BUBBLEWRAP=1
 # provider pack, and agent CLIs. Keep our capability-dropping entrypoint;
 # setpriv is supplied explicitly rather than assumed to exist in a slim image.
 USER root
+ARG TAILSCALE_VERSION=1.104.2
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends util-linux \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends util-linux openssh-client ca-certificates curl \
+    && curl --proto '=https' --tlsv1.2 -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg -o /usr/share/keyrings/tailscale-archive-keyring.gpg \
+    && curl --proto '=https' --tlsv1.2 -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tailscale=${TAILSCALE_VERSION} \
     && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/runner-ssh.conf /etc/ssh/ssh_config.d/90-paperclip-runner.conf
 
 WORKDIR /wrapper
 COPY package.json /wrapper/package.json
@@ -28,7 +35,9 @@ RUN npm install --omit=dev && npm cache clean --force
 COPY src /wrapper/src
 COPY scripts/entrypoint.sh /wrapper/entrypoint.sh
 COPY scripts/bootstrap-ceo.mjs /wrapper/template/bootstrap-ceo.mjs
-RUN chmod +x /wrapper/entrypoint.sh \
+RUN sh -n /wrapper/entrypoint.sh \
+    && node --check /wrapper/src/tailscale-supervisor.mjs \
+    && chmod +x /wrapper/entrypoint.sh \
     && chown -R node:node /wrapper \
     && test -f /app/server/dist-runtime/index.mjs \
     && command -v setpriv

@@ -19,6 +19,14 @@ chown -R node:node /paperclip
 # runtime, as Claude Code checks for those too.
 unset SUDO_USER SUDO_UID SUDO_GID SUDO_COMMAND 2>/dev/null || true
  
+# Overlay transport is opt-in. The existing command and UID/capability drop
+# remain unchanged when disabled; join credentials never reach the application.
+if [ "${PAPERCLIP_TAILSCALE_ENABLED:-false}" = "true" ]; then
+  set -- node /wrapper/src/tailscale-supervisor.mjs "$@"
+else
+  unset PAPERCLIP_TAILSCALE_AUTHKEY
+fi
+
 exec setpriv \
   --reuid=node \
   --regid=node \
