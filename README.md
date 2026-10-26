@@ -244,3 +244,18 @@ docker stop paperclip_app paperclip_pg
 
 - **This template / deploy issues:** [this repo’s Issues](https://github.com/Lukem121/paperclip-railway-template/issues).
 - **Paperclip app bugs and features:** [paperclipai/paperclip Issues](https://github.com/paperclipai/paperclip/issues).
+
+
+## Migration maintenance mode
+
+For an approved migration window, pause the agents and record their original states before stopping the application. Paperclip's Pause action cancels queued run attempts while retaining task and run history; do not replay those attempts automatically.
+
+Set the Railway custom start command to:
+
+```text
+/usr/bin/tini -s -- /wrapper/entrypoint.sh node /wrapper/src/maintenance.mjs
+```
+
+This retains the existing init, privilege drop and optional private transport. It starts no Paperclip server, scheduler, OAuth refresher or agent. GET and HEAD `/setup/healthz` return 200 with `paperclipStarted: false`; all application, setup and MCP routes return 503. The database and persistent volume remain available to the separately authorized export procedure. No diagnostic or export endpoint is exposed over HTTP.
+
+Verify the deployed command and process list before taking the final snapshot. Keep the database, volume and prior source/start configuration for rollback. Clearing the custom start command restores normal startup; resume agents only after the destination or rollback has been checked.
