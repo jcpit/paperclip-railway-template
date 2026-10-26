@@ -1,0 +1,119 @@
+[
+  {
+    "path": "server/src/services/remote-http-endpoint-guard.ts",
+    "oldText": "const DEFAULT_DNS_TIMEOUT_MS = 5_000;",
+    "newText": "import { matchesPrivateMcpEndpoint, type PrivateMcpEndpointPolicy } from \"./mcp-private-endpoint-policy.js\";\n\nconst DEFAULT_DNS_TIMEOUT_MS = 5_000;"
+  },
+  {
+    "path": "server/src/services/remote-http-endpoint-guard.ts",
+    "oldText": "  allowPrivateNetwork?: boolean;",
+    "newText": "  allowPrivateNetwork?: boolean;\n  privateMcpEndpointPolicy?: PrivateMcpEndpointPolicy;"
+  },
+  {
+    "path": "server/src/services/remote-http-endpoint-guard.ts",
+    "oldText": "  const literalVersion = isIP(hostname);",
+    "newText": "  const privateMcp = matchesPrivateMcpEndpoint(endpoint, options.privateMcpEndpointPolicy);\n  const literalVersion = isIP(hostname);"
+  },
+  {
+    "path": "server/src/services/remote-http-endpoint-guard.ts",
+    "oldText": "(!options.allowPrivateNetwork && isPrivateOrReservedIp(hostname))",
+    "newText": "(!options.allowPrivateNetwork && !privateMcp && isPrivateOrReservedIp(hostname))"
+  },
+  {
+    "path": "server/src/services/remote-http-fetch.ts",
+    "oldText": "/** Statuses whose HTTP semantics forbid a response body. */",
+    "newText": "import { matchesPrivateMcpEndpoint } from \"./mcp-private-endpoint-policy.js\";\n\n/** Statuses whose HTTP semantics forbid a response body. */"
+  },
+  {
+    "path": "server/src/services/remote-http-fetch.ts",
+    "oldText": "  if (literalHost) {",
+    "newText": "  const privateMcp = matchesPrivateMcpEndpoint(endpoint, options.privateMcpEndpointPolicy);\n  if (literalHost && !privateMcp) {"
+  },
+  {
+    "path": "server/src/services/remote-http-fetch.ts",
+    "oldText": "  return pinnedRequest(endpoint, approved, init, options);",
+    "newText": "  const response = await pinnedRequest(endpoint, approved, init, options);\n  if (privateMcp && response.status >= 300 && response.status < 400 && response.headers.has(\"location\")) {\n    await response.body?.cancel();\n    throw options.error(\"Private MCP redirects are not permitted\", \"remote_http_private_redirect_rejected\");\n  }\n  return response;"
+  },
+  {
+    "path": "server/src/services/remote-http-fetch.ts",
+    "oldText": "  const signal = init.signal ?? null;",
+    "newText": "  const signal = init.signal ?? null;\n  const privateMcpEndpointPolicy = matchesPrivateMcpEndpoint(endpoint, options.privateMcpEndpointPolicy)\n    ? options.privateMcpEndpointPolicy : undefined;"
+  },
+  {
+    "path": "server/src/services/remote-http-fetch.ts",
+    "oldText": "const socket = await dialApprovedAddress({ approved, approvedSet, port, hostname, useTls, signal, options });",
+    "newText": "const socket = await dialApprovedAddress({ approved, approvedSet, port, hostname, useTls, signal, options, privateMcpEndpointPolicy });"
+  },
+  {
+    "path": "server/src/services/remote-http-fetch.ts",
+    "oldText": "  options: GuardedRemoteHttpFetchOptions;\n}): Promise<Socket | TLSSocket> {",
+    "newText": "  options: GuardedRemoteHttpFetchOptions;\n  privateMcpEndpointPolicy?: GuardedRemoteHttpFetchOptions[\"privateMcpEndpointPolicy\"];\n}): Promise<Socket | TLSSocket> {",
+    "all": true
+  },
+  {
+    "path": "server/src/services/remote-http-fetch.ts",
+    "oldText": "|| (!options.allowPrivateNetwork && isPrivateOrReservedIp(peer))",
+    "newText": "|| (!options.allowPrivateNetwork && isPrivateOrReservedIp(peer)\n      && peer !== input.privateMcpEndpointPolicy?.address)"
+  },
+  {
+    "path": "server/src/services/remote-http-fetch.ts",
+    "oldText": "    host: hostname,\n  });",
+    "newText": "    host: hostname,\n    ...(input.privateMcpEndpointPolicy ? { ca: input.privateMcpEndpointPolicy.ca, rejectUnauthorized: true } : {}),\n  });"
+  },
+  {
+    "path": "server/src/services/tool-access/remote-http.ts",
+    "oldText": "const REMOTE_HTTP_REDIRECT_STATUSES",
+    "newText": "import { privateMcpEndpointOptions } from \"../mcp-private-endpoint-policy.js\";\n\nconst REMOTE_HTTP_REDIRECT_STATUSES"
+  },
+  {
+    "path": "server/src/services/tool-access/remote-http.ts",
+    "oldText": "        allowPrivateNetwork: allowPrivateRemoteEndpoints(),",
+    "newText": "        allowPrivateNetwork: allowPrivateRemoteEndpoints(),\n        ...privateMcpEndpointOptions(endpoint),"
+  },
+  {
+    "path": "server/src/services/tool-access/remote-http.ts",
+    "oldText": "function remoteHttpFetchOptions(): GuardedRemoteHttpFetchOptions {",
+    "newText": "function remoteHttpFetchOptions(endpoint: URL): GuardedRemoteHttpFetchOptions {"
+  },
+  {
+    "path": "server/src/services/tool-access/remote-http.ts",
+    "oldText": "remoteHttpFetchOptions());",
+    "newText": "remoteHttpFetchOptions(endpoint));"
+  },
+  {
+    "path": "server/src/services/tool-access/remote-http.ts",
+    "oldText": "      currentUrl = new URL(location, endpoint).toString();",
+    "newText": "      const nextUrl = new URL(location, endpoint);\n      if (privateMcpEndpointOptions(nextUrl).privateMcpEndpointPolicy) {\n        throw new HttpError(502, \"Redirects into private MCP are not permitted\", { code: \"remote_http_private_redirect_rejected\" });\n      }\n      currentUrl = nextUrl.toString();"
+  },
+  {
+    "path": "server/src/services/tool-gateway.ts",
+    "oldText": "} from \"./remote-http-fetch.js\";",
+    "newText": "} from \"./remote-http-fetch.js\";\nimport { privateMcpEndpointOptions } from \"./mcp-private-endpoint-policy.js\";"
+  },
+  {
+    "path": "server/src/services/tool-gateway.ts",
+    "oldText": "function remoteHttpFetchOptions(): GuardedRemoteHttpFetchOptions {",
+    "newText": "function remoteHttpFetchOptions(endpoint?: URL | string): GuardedRemoteHttpFetchOptions {"
+  },
+  {
+    "path": "server/src/services/tool-gateway.ts",
+    "oldText": "      allowPrivateNetwork: allowPrivateRemoteEndpoints(),",
+    "newText": "      allowPrivateNetwork: allowPrivateRemoteEndpoints(),\n      ...(endpoint ? privateMcpEndpointOptions(endpoint) : {}),"
+  },
+  {
+    "path": "server/src/services/tool-access/remote-http.ts",
+    "oldText": "      allowPrivateNetwork: allowPrivateRemoteEndpoints(),\n      lookup:",
+    "newText": "      allowPrivateNetwork: allowPrivateRemoteEndpoints(),\n      ...privateMcpEndpointOptions(endpoint),\n      lookup:"
+  },
+  {
+    "path": "server/src/services/tool-gateway.ts",
+    "oldText": "      remoteHttpFetchOptions(),\n    );\n    const body = await readBoundedRemoteResponse(response);",
+    "newText": "      remoteHttpFetchOptions(endpoint),\n    );\n    const body = await readBoundedRemoteResponse(response);"
+  },
+  {
+    "path": "server/src/services/tool-gateway.ts",
+    "oldText": "              ...remoteHttpFetchOptions(),",
+    "newText": "              ...remoteHttpFetchOptions(target),"
+  }
+]
+
