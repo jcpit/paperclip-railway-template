@@ -1,5 +1,11 @@
 # Template Changelog
 
+## 2026-10-26
+
+- Added: optional local-image patch for one administrator-owned private MCP HTTPS origin and service-specific CA, preserving public MCP validation and trust.
+- Added: isolated TLS proxy for the existing private gateway, source restricted to the Paperclip host, plus security and certificate regression tests.
+- Preserved: Railway image/defaults, authenticated mode, vault references, grants, tool policies and sandbox settings. This optional local image does not upgrade the application or migrate the database.
+
 ## 2026-10-24
 
 - Added: opt-in, unprivileged Tailscale userspace transport for a separately restricted SSH runner, with a loopback-only SOCKS listener and narrowly matched OpenSSH alias.
