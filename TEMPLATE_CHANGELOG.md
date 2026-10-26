@@ -1,5 +1,10 @@
 # Template Changelog
 
+## 2026-10-26
+
+- Added: opt-in migration maintenance process with the existing health probe and 503 responses for application/setup/MCP routes. Normal startup, image pin and private transport are unchanged.
+- Added: regression coverage and operator guidance for pausing agents, taking a consistent snapshot and retaining rollback.
+
 ## 2026-10-24
 
 - Added: opt-in, unprivileged Tailscale userspace transport for a separately restricted SSH runner, with a loopback-only SOCKS listener and narrowly matched OpenSSH alias.
